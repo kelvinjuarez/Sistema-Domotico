@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "author": "Kelvin Juárez",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "wokwi-breadboard", "id": "bb1", "top": 35.4, "left": -45.2, "attrs": {} },
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 278.4, "left": 139.24, "attrs": {} },
+    { "type": "wokwi-dht22", "id": "dht1", "top": -105.3, "left": -341.4, "attrs": {} },
+    { "type": "wokwi-pir-motion-sensor", "id": "pir1", "top": 148, "left": -141.78, "attrs": {} },
+    {
+      "type": "wokwi-buzzer",
+      "id": "bz1",
+      "top": -45.6,
+      "left": 165,
+      "attrs": { "volume": "0.1" }
+    },
+    {
+      "type": "wokwi-lcd1602",
+      "id": "lcd2",
+      "top": 332.8,
+      "left": 447.2,
+      "attrs": { "pins": "i2c" }
+    },
+    { "type": "wokwi-servo", "id": "servo1", "top": 353.2, "left": -211.2, "attrs": {} },
+    { "type": "wokwi-rgb-led", "id": "rgb1", "top": 436, "left": 154.7, "attrs": {} },
+    { "type": "wokwi-relay-module", "id": "relay1", "top": -163, "left": 163.2, "attrs": {} },
+    { "type": "wokwi-relay-module", "id": "relay2", "top": -163, "left": 320, "attrs": {} },
+    {
+      "type": "wokwi-potentiometer",
+      "id": "pot_gas",
+      "top": -120,
+      "left": -120,
+      "attrs": { "label": "Gas MQ-135" }
+    },
+    {
+      "type": "wokwi-potentiometer",
+      "id": "pot_agua",
+      "top": -120,
+      "left": 20,
+      "attrs": { "label": "Fuga Agua" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn1",
+      "top": 92.6,
+      "left": 873.6,
+      "attrs": { "color": "green", "label": "Seguridad" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn2",
+      "top": 179,
+      "left": 873.6,
+      "attrs": { "color": "blue", "label": "Luz Manual" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn3",
+      "top": 265.4,
+      "left": 873.6,
+      "attrs": { "color": "red", "label": "Cortina" }
+    }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+    [ "esp:3V3", "bb1:bp.1", "green", [ "v-9.6", "h-182.25", "v-75.9" ] ],
+    [ "esp:GND.2", "bb1:bn.1", "black", [ "h-288", "v-75.5" ] ],
+    [ "dht1:GND", "bb1:bn.2", "black", [] ],
+    [ "dht1:VCC", "bb1:bp.2", "red", [] ],
+    [ "pir1:GND", "bb1:bn.3", "black", [] ],
+    [ "pir1:VCC", "bb1:bp.3", "red", [] ],
+    [ "bz1:2", "esp:GND.2", "black", [] ],
+    [ "lcd2:GND", "bb1:bn.5", "black", [] ],
+    [ "lcd2:VCC", "bb1:bp.5", "red", [] ],
+    [ "servo1:GND", "bb1:bn.6", "black", [] ],
+    [ "servo1:VCC", "bb1:bp.6", "red", [] ],
+    [ "rgb1:COM", "esp:GND.2", "black", [] ],
+    [ "relay1:GND", "bb1:bn.8", "black", [] ],
+    [ "relay1:VCC", "bb1:bp.8", "red", [] ],
+    [ "relay2:GND", "bb1:bn.9", "black", [] ],
+    [ "relay2:VCC", "bb1:bp.9", "red", [] ],
+    [ "pot_gas:GND", "bb1:bn.10", "black", [] ],
+    [ "pot_gas:VCC", "bb1:bp.10", "red", [] ],
+    [ "pot_agua:GND", "bb1:bn.11", "black", [] ],
+    [ "pot_agua:VCC", "bb1:bp.11", "red", [] ],
+    [ "btn1:1.l", "esp:GND.2", "black", [] ],
+    [ "btn1:2.r", "esp:32", "white", [] ],
+    [ "btn2:1.l", "esp:GND.2", "black", [] ],
+    [ "btn2:2.r", "esp:33", "white", [] ],
+    [ "btn3:1.l", "esp:GND.2", "black", [] ],
+    [ "btn3:2.r", "esp:14", "white", [] ],
+    [ "dht1:SDA", "esp:15", "blue", [] ],
+    [ "pir1:OUT", "esp:13", "purple", [] ],
+    [ "pot_gas:SIG", "esp:34", "orange", [] ],
+    [ "pot_agua:SIG", "esp:35", "orange", [] ],
+    [ "relay1:IN", "esp:2", "yellow", [] ],
+    [ "relay2:IN", "esp:4", "yellow", [] ],
+    [ "servo1:PWM", "esp:18", "darkgreen", [] ],
+    [ "bz1:1", "esp:19", "black", [] ],
+    [ "rgb1:R", "esp:25", "red", [] ],
+    [ "rgb1:G", "esp:26", "green", [] ],
+    [ "rgb1:B", "esp:27", "blue", [] ],
+    [ "lcd2:SDA", "esp:21", "blue", [] ],
+    [ "lcd2:SCL", "esp:22", "cyan", [] ]
+  ],
+  "dependencies": {}
+}
