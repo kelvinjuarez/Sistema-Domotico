@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UDB - Estación de Control SCADA</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
+    <style>
+        @keyframes rotar { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .anim-girar { animation: rotar 1.2s linear infinite; }
+        @keyframes pulso { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .anim-pulso { animation: pulso 0.8s ease-in-out infinite; }
+    </style>
+</head>
+<body class="bg-[#09090b] text-[#f4f4f5] font-sans min-h-screen selection:bg-[#27272a]">
+
+    <header class="bg-[#141416] border-b border-[#27272a] shadow-md w-full py-6">
+        <div class="max-w-6xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex flex-col md:flex-row items-center gap-4 text-center md:text-left">
+                <svg class="h-9 w-9 text-[#a78bfa]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 5h10a2 2 0 012 2v10a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2z" />
+                </svg>
+                <div>
+                    <h1 class="text-xl font-extrabold text-[#f4f4f5] tracking-wide uppercase">Sistema Domótico</h1>
+                    <p class="text-xs text-[#71717a] font-medium mt-0.5">ACO941 - Grupo 2</p>
+                </div>
+            </div>
+            <div id="net-status" class="bg-[#ef4444] text-[#ffffff] px-4 py-1.5 rounded-md text-xs font-bold tracking-wider uppercase shadow-inner shadow-black/20">
+                ● CONECTANDO...
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-6 py-10">
+        
+        <div class="flex items-center gap-2 mb-4 border-b border-[#27272a] pb-2">
+            <span class="h-2 w-2 rounded-full bg-[#3f3f46]"></span>
+            <h3 class="text-xs font-black text-[#71717a] uppercase tracking-widest">Subsistema de Captura de Entorno (Sensores)</h3>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+            <div class="bg-[#141416] rounded-xl p-6 border border-[#27272a] shadow-sm flex items-center gap-5">
+                <div class="p-3 bg-[#1e1e21] rounded-lg border border-[#27272a]">
+                    <svg class="h-10 w-10 text-[#f43f5e]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5m14 8v-3.5a3.5 3.5 0 10-7 0V19m7 0a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h14z" />
+                    </svg>
+                </div>
+                <div class="text-left">
+                    <span class="text-xs font-bold text-[#71717a] uppercase tracking-wider block">Atmósfera Sala</span>
+                    <span id="txt-temp" class="text-3xl font-black text-[#f43f5e] tracking-tight block">--.- °C</span>
+                    <span id="txt-hum" class="text-sm font-bold text-[#06b6d4] block mt-0.5">-- % H.R.</span>
+                </div>
+            </div>
+
+            <div class="bg-[#141416] rounded-xl p-6 border border-[#27272a] shadow-sm flex flex-col justify-between">
+                <div class="flex items-center gap-4 mb-3">
+                    <div class="p-2.5 bg-[#1e1e21] rounded-lg border border-[#27272a]">
+                        <svg class="h-6 w-6 text-[#f59e0b]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A8 8 0 0117.657 18.657z" />
+                        </svg>
+                    </div>
+                    <div class="text-left">
+                        <span class="text-xs font-bold text-[#71717a] uppercase tracking-wider block">Calidad de Aire</span>
+                        <span id="txt-gas" class="text-base font-black text-[#f59e0b]">Obteniendo...</span>
+                    </div>
+                </div>
+                <div class="w-full bg-[#1e1e21] rounded-md h-3 overflow-hidden p-0.5 border border-[#27272a]">
+                    <div id="bar-gas" class="bg-[#f59e0b] h-full rounded-sm transition-all duration-300" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div class="bg-[#141416] rounded-xl p-6 border border-[#27272a] shadow-sm flex flex-col justify-between">
+                <div class="flex items-center gap-4 mb-3">
+                    <div class="p-2.5 bg-[#1e1e21] rounded-lg border border-[#27272a]">
+                        <svg class="h-6 w-6 text-[#2563eb]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 9.172V5L8 4z" />
+                        </svg>
+                    </div>
+                    <div class="text-left">
+                        <span class="text-xs font-bold text-[#71717a] uppercase tracking-wider block">Nivel Hidráulico</span>
+                        <span id="txt-agua" class="text-base font-black text-[#2563eb]">Obteniendo...</span>
+                    </div>
+                </div>
+                <div class="w-full bg-[#1e1e21] rounded-md h-3 overflow-hidden p-0.5 border border-[#27272a]">
+                    <div id="bar-agua" class="bg-[#2563eb] h-full rounded-sm transition-all duration-300" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2 mb-4 border-b border-[#27272a] pb-2">
+            <span class="h-2 w-2 rounded-full bg-[#3f3f46]"></span>
+            <h3 class="text-xs font-black text-[#71717a] uppercase tracking-widest">Seguridad Colectiva y Balizas (Alarmas)</h3>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+            <div class="bg-[#141416] rounded-xl p-5 border border-[#27272a] shadow-sm flex items-center gap-4">
+                <div id="box-pir" class="p-3 bg-[#1e1e21] text-[#52525b] rounded-lg border border-[#27272a]">
+                    <svg class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                </div>
+                <div class="text-left">
+                    <span class="text-xs font-bold text-[#71717a] uppercase tracking-wider block">Presencia Volumétrica</span>
+                    <span id="txt-seg-modo" class="text-sm font-bold text-[#f4f4f5] block">SISTEMA: APAGADO</span>
+                    <span id="txt-pir" class="text-xs text-[#71717a] block mt-0.5">Esperando enlace hardware...</span>
+                </div>
+            </div>
+
+            <div class="bg-[#141416] rounded-xl p-5 border border-[#27272a] shadow-sm flex items-center gap-4">
+                <div id="box-buzzer" class="p-3 bg-[#1e1e21] text-[#52525b] rounded-lg border border-[#27272a]">
+                    <svg class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                    </svg>
+                </div>
+                <div class="text-left">
+                    <span class="text-xs font-bold text-[#71717a] uppercase tracking-wider block">Sirena Acústica</span>
+                    <span id="txt-buzzer" class="text-sm font-bold text-[#52525b] block">SIRENA: INACTIVA</span>
+                    <span class="text-xs text-[#71717a] block mt-0.5">Frecuencia Piezoeléctrica</span>
+                </div>
+            </div>
+
+            <div class="bg-[#141416] rounded-xl p-5 border border-[#27272a] shadow-sm flex items-center gap-4">
+                <div id="led-rgb" class="h-11 w-11 rounded-full bg-[#27272a] border-4 border-[#09090b]"></div>
+                <div class="text-left">
+                    <span class="text-xs font-bold text-[#71717a] uppercase tracking-wider block">Baliza Lumínica RGB</span>
+                    <span id="txt-rgb" class="text-sm font-bold text-[#52525b] block">BALIZA: ESPERA</span>
+                    <span class="text-xs text-[#71717a] block mt-0.5">Indicador óptico de planta</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2 mb-4 border-b border-[#27272a] pb-2">
+            <span class="h-2 w-2 rounded-full bg-[#3f3f46]"></span>
+            <h3 class="text-xs font-black text-[#71717a] uppercase tracking-widest">Subsistema de Telecontrol Activo (Actuadores)</h3>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="bg-[#141416] rounded-xl p-6 border border-[#27272a] shadow-md flex flex-col items-center justify-between">
+                <div id="icon-luz" class="p-4 bg-[#1e1e21] text-[#52525b] rounded-full mb-3 border border-[#27272a] transition-all">
+                    <svg class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                </div>
+                <span class="text-xs font-bold text-[#71717a] uppercase tracking-wider mb-5">Relé 1: Planta Lumínica</span>
+                <button onclick="enviarComando('luz')" id="btn-luz" class="bg-[#27272a] text-[#e4e4e7] font-bold text-xs tracking-wider uppercase py-3 rounded-lg w-full border border-[#3f3f46]/30 cursor-pointer">Cargar Enlace...</button>
+            </div>
+
+            <div class="bg-[#141416] rounded-xl p-6 border border-[#27272a] shadow-md flex flex-col items-center justify-between">
+                <div id="icon-vent" class="p-4 bg-[#1e1e21] text-[#52525b] rounded-full mb-3 border border-[#27272a] transition-all origin-center">
+                    <svg class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                </div>
+                <span class="text-xs font-bold text-[#71717a] uppercase tracking-wider mb-5">Relé 2: Turbina Extracción</span>
+                <button onclick="enviarComando('vent')" id="btn-vent" class="bg-[#27272a] text-[#e4e4e7] font-bold text-xs tracking-wider uppercase py-3 rounded-lg w-full border border-[#3f3f46]/30 cursor-pointer">Cargar Enlace...</button>
+            </div>
+
+            <div class="bg-[#141416] rounded-xl p-6 border border-[#27272a] shadow-md flex flex-col items-center justify-between">
+                <div id="icon-cortina" class="p-4 bg-[#1e1e21] text-[#52525b] rounded-full mb-3 border border-[#27272a] transition-all">
+                    <svg class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    </svg>
+                </div>
+                <span class="text-xs font-bold text-[#71717a] uppercase tracking-wider mb-5">Servo: Compuerta Cortina</span>
+                <button onclick="enviarComando('cortina')" id="btn-cortina" class="bg-[#27272a] text-[#e4e4e7] font-bold text-xs tracking-wider uppercase py-3 rounded-lg w-full border border-[#3f3f46]/30 cursor-pointer">Cargar Enlace...</button>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        const PREFIJO = "udb/gj111587/";
+        
+        const TOPICS = {
+            temp: PREFIJO + "domotica/sala/temperatura",
+            hum: PREFIJO + "domotica/sala/humedad",
+            gas: PREFIJO + "domotica/sala/calidad_aire",
+            agua: PREFIJO + "domotica/sala/fuga_agua",
+            pir: PREFIJO + "domotica/sala/movimiento",
+            segMode: PREFIJO + "domotica/sala/seguridad_estado",
+            cmdLuz: PREFIJO + "domotica/sala/actuadores/iluminacion",
+            cmdVent: PREFIJO + "domotica/sala/actuadores/ventilacion",
+            cmdCortina: PREFIJO + "domotica/sala/actuadores/cortina"
+        };
+
+        let estadosActuadores = { luz: false, vent: false, cortina: false };
+        let banderaSeguridad = false;
+
+        const clientId = "web_scada_" + Math.random().toString(16).substr(2, 4);
+        const client = new Paho.MQTT.Client("broker.hivemq.com", 8000, "/mqtt", clientId);
+
+        client.onConnectionLost = (responseObject) => {
+            document.getElementById("net-status").className = "bg-[#ef4444] text-[#ffffff] px-4 py-1.5 rounded-md text-xs font-bold tracking-wider uppercase";
+            document.getElementById("net-status").innerText = "● DESCONECTADO";
+            setTimeout(conectar, 3000); 
+        };
+
+        client.onMessageArrived = (message) => {
+            const topic = message.destinationName;
+            const payload = message.payloadString;
+            console.log(`[DATO RECIBIDO] Canal: ${topic} -> Valor: ${payload}`);
+
+            if (topic === TOPICS.temp) {
+                let tempVal = parseFloat(payload);
+                document.getElementById("txt-temp").innerText = tempVal.toFixed(1) + " °C";
+                evaluarAlarmasGlobales(null, null, null);
+            } 
+            else if (topic === TOPICS.hum) {
+                document.getElementById("txt-hum").innerText = parseInt(payload) + " % H.R.";
+            }
+            else if (topic === TOPICS.gas) {
+                let valor = parseInt(payload);
+                document.getElementById("txt-gas").innerText = valor + " PPM";
+                document.getElementById("bar-gas").style.width = Math.min((valor / 4095) * 100, 100) + "%";
+                evaluarAlarmasGlobales(valor, null, null);
+            }
+            else if (topic === TOPICS.agua) {
+                let valor = parseInt(payload);
+                document.getElementById("txt-agua").innerText = valor + " ADC";
+                document.getElementById("bar-agua").style.width = Math.min((valor / 4095) * 100, 100) + "%";
+                evaluarAlarmasGlobales(null, valor, null);
+            }
+            else if (topic === TOPICS.segMode) {
+                banderaSeguridad = (payload === "ARMADO");
+                document.getElementById("txt-seg-modo").innerText = banderaSeguridad ? "SISTEMA: VIGILANDO" : "SISTEMA: DESARMADO";
+                document.getElementById("box-pir").className = banderaSeguridad ? "p-3 bg-[#1e1e21] text-[#f59e0b] rounded-lg border border-[#f59e0b]/40" : "p-3 bg-[#1e1e21] text-[#52525b] rounded-lg border border-[#27272a]";
+                evaluarAlarmasGlobales(null, null, "0");
+            }
+            
+            // 🔧 ESCUCHA DE ACTUALIZACIÓN REMOTA DE ACTUADORES (Sincronía total Wokwi -> Web)
+            else if (topic === TOPICS.cmdLuz) {
+                estadosActuadores.luz = (payload === "ON");
+                let btn = document.getElementById("btn-luz");
+                btn.innerText = estadosActuadores.luz ? "DESACTIVAR" : "ACTIVAR";
+                btn.className = estadosActuadores.luz ? "bg-[#10b981] text-[#09090b] font-bold text-xs tracking-wider uppercase py-3 rounded-lg w-full border border-[#10b981] cursor-pointer" : "bg-[#27272a] text-[#e4e4e7] font-bold text-xs tracking-wider uppercase py-3 rounded-lg w-full border border-[#3f3f46]/30 cursor-pointer";
+                document.getElementById("icon-luz").className = estadosActuadores.luz ? "p-4 bg-[#1e1e21] text-[#10b981] rounded-full mb-3 border border-[#10b981]/40 shadow-[0_0_15px_rgba(16,185,129,0.2)]" : "p-4 bg-[#1e1e21] text-[#52525b] rounded-full mb-3 border border-[#27272a]";
+            }
+            else if (topic === TOPICS.cmdVent) {
+                estadosActuadores.vent = (payload === "ON");
+                let btn = document.getElementById("btn-vent");
+                btn.innerText = estadosActuadores.vent ? "DESACTIVAR" : "ACTIVAR";
+                btn.className = estadosActuadores.vent ? "bg-[#10b981] text-[#09090b] font-bold text-xs tracking-wider uppercase py-3 rounded-lg w-full border border-[#10b981] cursor-pointer" : "bg-[#27272a] text-[#e4e4e7] font-bold text-xs tracking-wider uppercase py-3 rounded-lg w-full border border-[#3f3f46]/30 cursor-pointer";
+                document.getElementById("icon-vent").className = estadosActuadores.vent ? "p-4 bg-[#1e1e21] text-[#10b981] rounded-full mb-3 border border-[#10b981]/40 anim-girar" : "p-4 bg-[#1e1e21] text-[#52525b] rounded-full mb-3 border border-[#27272a]";
+            }
+            else if (topic === TOPICS.cmdCortina) {
+                estadosActuadores.cortina = (payload === "OPEN");
+                let btn = document.getElementById("btn-cortina");
+                btn.innerText = estadosActuadores.cortina ? "CERRAR PERS" : "ABRIR PERS";
+                btn.className = estadosActuadores.cortina ? "bg-[#6366f1] text-[#ffffff] font-bold text-xs tracking-wider uppercase py-3 rounded-lg w-full border border-[#6366f1] cursor-pointer" : "bg-[#27272a] text-[#e4e4e7] font-bold text-xs tracking-wider uppercase py-3 rounded-lg w-full border border-[#3f3f46]/30 cursor-pointer";
+                document.getElementById("icon-cortina").className = estadosActuadores.cortina ? "p-4 bg-[#1e1e21] text-[#6366f1] rounded-full mb-3 border border-[#6366f1]/40 shadow-[0_0_15px_rgba(99,102,241,0.2)]" : "p-4 bg-[#1e1e21] text-[#52525b] rounded-full mb-3 border border-[#27272a]";
+            }
+            
+            else if (topic === TOPICS.pir) {
+                if (banderaSeguridad) {
+                    document.getElementById("txt-pir").innerText = payload === "1" ? "¡INTRUSO DETECTADO!" : "Línea perimetral segura";
+                    evaluarAlarmasGlobales(null, null, payload);
+                } else {
+                    if (payload === "1") {
+                        document.getElementById("txt-pir").innerText = "Movimiento (Sistema Desarmado)";
+                        document.getElementById("txt-pir").className = "text-xs text-[#f59e0b] font-semibold block mt-0.5";
+                    } else {
+                        document.getElementById("txt-pir").innerText = "Sensor PIR: Sin Novedad";
+                        document.getElementById("txt-pir").className = "text-xs text-[#71717a] block mt-0.5";
+                    }
+                    evaluarAlarmasGlobales(null, null, "0");
+                }
+            }
+        };
+
+        function evaluarAlarmasGlobales(gas, agua, pir) {
+            let txtGas = document.getElementById("txt-gas").innerText;
+            let valGas = gas !== null ? gas : (txtGas.includes("Obteniendo") ? 0 : parseInt(txtGas) || 0);
+            let txtAgua = document.getElementById("txt-agua").innerText;
+            let valAgua = agua !== null ? agua : (txtAgua.includes("Obteniendo") ? 0 : parseInt(txtAgua) || 0);
+            let txtPIR = pir !== null ? pir : (document.getElementById("txt-pir").innerText.includes("INTRUSO") ? "1" : "0");
+
+            let boxBuzzer = document.getElementById("box-buzzer");
+            let txtBuzzer = document.getElementById("txt-buzzer");
+            let ledRGB = document.getElementById("led-rgb");
+            let txtRGB = document.getElementById("txt-rgb");
+
+            if (valGas > 2000 || valAgua > 1500) {
+                boxBuzzer.className = "p-3 bg-[#ef4444] text-[#ffffff] rounded-lg font-bold border border-[#ef4444] anim-pulso";
+                txtBuzzer.innerText = "SIRENA: ¡EVACUACIÓN CRÍTICA!";
+                txtBuzzer.className = "text-sm font-bold text-[#ef4444] block";
+                ledRGB.className = "h-11 w-11 rounded-full bg-[#ef4444] border-4 border-[#09090b] shadow-[0_0_20px_#ef4444] anim-pulso";
+                txtRGB.innerText = "BALIZA: ROJO (PELIGRO)";
+            } 
+            else if (banderaSeguridad && txtPIR === "1") {
+                boxBuzzer.className = "p-3 bg-[#3b82f6] text-[#ffffff] rounded-lg font-bold border border-[#3b82f6] anim-pulso";
+                txtBuzzer.innerText = "SIRENA: ¡ALERTA PERIMETRAL!";
+                txtBuzzer.className = "text-sm font-bold text-[#3b82f6] block";
+                ledRGB.className = "h-11 w-11 rounded-full bg-[#3b82f6] border-4 border-[#09090b] shadow-[0_0_20px_#3b82f6]";
+                txtRGB.innerText = "BALIZA: AZUL (INTRUSIÓN)";
+            } 
+            else {
+                boxBuzzer.className = "p-3 bg-[#1e1e21] text-[#52525b] rounded-lg border border-[#27272a]";
+                txtBuzzer.innerText = "SIRENA: INACTIVA";
+                txtBuzzer.className = "text-sm font-bold text-[#52525b] block";
+                
+                if (banderaSeguridad) {
+                    ledRGB.className = "h-11 w-11 rounded-full bg-[#f59e0b] border-4 border-[#09090b] shadow-[0_0_15px_#f59e0b]";
+                    txtRGB.innerText = "BALIZA: AMARILLO (ARMADO)";
+                } else {
+                    ledRGB.className = "h-11 w-11 rounded-full bg-[#10b981] border-4 border-[#09090b] shadow-[0_0_15px_#10b981]";
+                    txtRGB.innerText = "BALIZA: VERDE (PLANTA OK)";
+                }
+            }
+        }
+
+        function conectar() {
+            client.connect({
+                onSuccess: () => {
+                    const status = document.getElementById("net-status");
+                    status.className = "bg-[#10b981] text-[#09090b] px-4 py-1.5 rounded-md text-xs font-bold tracking-wider uppercase shadow-inner";
+                    status.innerText = "● CONECTADO";
+                    
+                    document.getElementById("btn-luz").innerText = "ACTIVAR";
+                    document.getElementById("btn-vent").innerText = "ACTIVAR";
+                    document.getElementById("btn-cortina").innerText = "ABRIR PERS";
+
+                    // Suscribirse a todo, incluyendo estados de los actuadores
+                    client.subscribe(TOPICS.temp);
+                    client.subscribe(TOPICS.hum);
+                    client.subscribe(TOPICS.gas);
+                    client.subscribe(TOPICS.agua);
+                    client.subscribe(TOPICS.pir);
+                    client.subscribe(TOPICS.segMode);
+                    client.subscribe(TOPICS.cmdLuz);
+                    client.subscribe(TOPICS.cmdVent);
+                    client.subscribe(TOPICS.cmdCortina);
+                }
+            });
+        }
+
+        function enviarComando(actuador) {
+            // Lógica reactiva pura: Solo enviamos el mensaje, el Dashboard se actualizará al recibir el eco del servidor
+            let mensaje = "";
+            if (actuador === "luz") {
+                mensaje = estadosActuadores.luz ? "OFF" : "ON";
+                client.send(TOPICS.cmdLuz, mensaje);
+            } 
+            else if (actuador === "vent") {
+                mensaje = estadosActuadores.vent ? "OFF" : "ON";
+                client.send(TOPICS.cmdVent, mensaje);
+            } 
+            else if (actuador === "cortina") {
+                mensaje = estadosActuadores.cortina ? "CLOSE" : "OPEN";
+                client.send(TOPICS.cmdCortina, mensaje);
+            }
+        }
+
+        conectar();
+    </script>
+</body>
+</html>
