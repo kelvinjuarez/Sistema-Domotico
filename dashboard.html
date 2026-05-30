@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>UDB - Estación de Control SCADA</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
     <style>
         @keyframes rotar { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -173,6 +173,7 @@
 
     <script>
         const PREFIJO = "udb/gj111587/";
+        let ultimaRecepcion = Date.now(); 
         
         const TOPICS = {
             temp: PREFIJO + "domotica/sala/temperatura",
@@ -181,9 +182,14 @@
             agua: PREFIJO + "domotica/sala/fuga_agua",
             pir: PREFIJO + "domotica/sala/movimiento",
             segMode: PREFIJO + "domotica/sala/seguridad_estado",
-            cmdLuz: PREFIJO + "domotica/sala/actuadores/iluminacion",
-            cmdVent: PREFIJO + "domotica/sala/actuadores/ventilacion",
-            cmdCortina: PREFIJO + "domotica/sala/actuadores/cortina"
+            
+            cmdLuz: PREFIJO + "domotica/sala/actuadores/iluminacion/set",
+            cmdVent: PREFIJO + "domotica/sala/actuadores/ventilacion/set",
+            cmdCortina: PREFIJO + "domotica/sala/actuadores/cortina/set",
+
+            stateLuz: PREFIJO + "domotica/sala/actuadores/iluminacion/state",
+            stateVent: PREFIJO + "domotica/sala/actuadores/ventilacion/state",
+            stateCortina: PREFIJO + "domotica/sala/actuadores/cortina/state"
         };
 
         let estadosActuadores = { luz: false, vent: false, cortina: false };
@@ -192,16 +198,31 @@
         const clientId = "web_scada_" + Math.random().toString(16).substr(2, 4);
         const client = new Paho.MQTT.Client("broker.hivemq.com", 8000, "/mqtt", clientId);
 
+        setInterval(() => {
+            if (Date.now() - ultimaRecepcion > 10000) { 
+                const status = document.getElementById("net-status");
+                status.className = "bg-[#71717a] text-[#ffffff] px-4 py-1.5 rounded-md text-xs font-bold tracking-wider uppercase anim-pulso";
+                status.innerText = "● OFFLINE (SIN SEÑAL HW)";
+            }
+        }, 2000);
+
         client.onConnectionLost = (responseObject) => {
-            document.getElementById("net-status").className = "bg-[#ef4444] text-[#ffffff] px-4 py-1.5 rounded-md text-xs font-bold tracking-wider uppercase";
-            document.getElementById("net-status").innerText = "● DESCONECTADO";
+            const status = document.getElementById("net-status");
+            status.className = "bg-[#ef4444] text-[#ffffff] px-4 py-1.5 rounded-md text-xs font-bold tracking-wider uppercase";
+            status.innerText = "● BROKER DESCONECTADO";
             setTimeout(conectar, 3000); 
         };
 
         client.onMessageArrived = (message) => {
             const topic = message.destinationName;
             const payload = message.payloadString;
-            console.log(`[DATO RECIBIDO] Canal: ${topic} -> Valor: ${payload}`);
+            
+            ultimaRecepcion = Date.now(); 
+            const status = document.getElementById("net-status");
+            if (status.innerText.includes("OFFLINE") || status.innerText.includes("CONECTANDO")) {
+                status.className = "bg-[#10b981] text-[#09090b] px-4 py-1.5 rounded-md text-xs font-bold tracking-wider uppercase shadow-inner";
+                status.innerText = "● CONECTADO";
+            }
 
             if (topic === TOPICS.temp) {
                 let tempVal = parseFloat(payload);
@@ -223,39 +244,48 @@
                 document.getElementById("bar-agua").style.width = Math.min((valor / 4095) * 100, 100) + "%";
                 evaluarAlarmasGlobales(null, valor, null);
             }
+            
+            // 🔧 SOLUCIÓN DE CONDICIÓN DE CARRERA: segMode ya no sobrescribe a ciegas con un "0" fijo
             else if (topic === TOPICS.segMode) {
                 banderaSeguridad = (payload === "ARMADO");
                 document.getElementById("txt-seg-modo").innerText = banderaSeguridad ? "SISTEMA: VIGILANDO" : "SISTEMA: DESARMADO";
                 document.getElementById("box-pir").className = banderaSeguridad ? "p-3 bg-[#1e1e21] text-[#f59e0b] rounded-lg border border-[#f59e0b]/40" : "p-3 bg-[#1e1e21] text-[#52525b] rounded-lg border border-[#27272a]";
-                evaluarAlarmasGlobales(null, null, "0");
+                
+                if (!banderaSeguridad) {
+                    // Si se desarmó el sistema, limpiamos forzosamente los widgets y apagamos la sirena
+                    document.getElementById("txt-pir").innerText = "Sensor PIR: Sin Novedad";
+                    document.getElementById("txt-pir").className = "text-xs text-[#71717a] block mt-0.5";
+                    evaluarAlarmasGlobales(null, null, "0");
+                } else {
+                    // Si sigue armado, dejamos que evalúe consultando el DOM de forma dinámica
+                    evaluarAlarmasGlobales(null, null, null);
+                }
             }
-            
-            // 🔧 ESCUCHA DE ACTUALIZACIÓN REMOTA DE ACTUADORES (Sincronía total Wokwi -> Web)
-            else if (topic === TOPICS.cmdLuz) {
+            else if (topic === TOPICS.stateLuz) {
                 estadosActuadores.luz = (payload === "ON");
                 let btn = document.getElementById("btn-luz");
                 btn.innerText = estadosActuadores.luz ? "DESACTIVAR" : "ACTIVAR";
                 btn.className = estadosActuadores.luz ? "bg-[#10b981] text-[#09090b] font-bold text-xs tracking-wider uppercase py-3 rounded-lg w-full border border-[#10b981] cursor-pointer" : "bg-[#27272a] text-[#e4e4e7] font-bold text-xs tracking-wider uppercase py-3 rounded-lg w-full border border-[#3f3f46]/30 cursor-pointer";
                 document.getElementById("icon-luz").className = estadosActuadores.luz ? "p-4 bg-[#1e1e21] text-[#10b981] rounded-full mb-3 border border-[#10b981]/40 shadow-[0_0_15px_rgba(16,185,129,0.2)]" : "p-4 bg-[#1e1e21] text-[#52525b] rounded-full mb-3 border border-[#27272a]";
             }
-            else if (topic === TOPICS.cmdVent) {
+            else if (topic === TOPICS.stateVent) {
                 estadosActuadores.vent = (payload === "ON");
                 let btn = document.getElementById("btn-vent");
                 btn.innerText = estadosActuadores.vent ? "DESACTIVAR" : "ACTIVAR";
                 btn.className = estadosActuadores.vent ? "bg-[#10b981] text-[#09090b] font-bold text-xs tracking-wider uppercase py-3 rounded-lg w-full border border-[#10b981] cursor-pointer" : "bg-[#27272a] text-[#e4e4e7] font-bold text-xs tracking-wider uppercase py-3 rounded-lg w-full border border-[#3f3f46]/30 cursor-pointer";
                 document.getElementById("icon-vent").className = estadosActuadores.vent ? "p-4 bg-[#1e1e21] text-[#10b981] rounded-full mb-3 border border-[#10b981]/40 anim-girar" : "p-4 bg-[#1e1e21] text-[#52525b] rounded-full mb-3 border border-[#27272a]";
             }
-            else if (topic === TOPICS.cmdCortina) {
+            else if (topic === TOPICS.stateCortina) {
                 estadosActuadores.cortina = (payload === "OPEN");
                 let btn = document.getElementById("btn-cortina");
                 btn.innerText = estadosActuadores.cortina ? "CERRAR PERS" : "ABRIR PERS";
                 btn.className = estadosActuadores.cortina ? "bg-[#6366f1] text-[#ffffff] font-bold text-xs tracking-wider uppercase py-3 rounded-lg w-full border border-[#6366f1] cursor-pointer" : "bg-[#27272a] text-[#e4e4e7] font-bold text-xs tracking-wider uppercase py-3 rounded-lg w-full border border-[#3f3f46]/30 cursor-pointer";
                 document.getElementById("icon-cortina").className = estadosActuadores.cortina ? "p-4 bg-[#1e1e21] text-[#6366f1] rounded-full mb-3 border border-[#6366f1]/40 shadow-[0_0_15px_rgba(99,102,241,0.2)]" : "p-4 bg-[#1e1e21] text-[#52525b] rounded-full mb-3 border border-[#27272a]";
             }
-            
             else if (topic === TOPICS.pir) {
                 if (banderaSeguridad) {
                     document.getElementById("txt-pir").innerText = payload === "1" ? "¡INTRUSO DETECTADO!" : "Línea perimetral segura";
+                    document.getElementById("txt-pir").className = payload === "1" ? "text-xs text-[#ef4444] font-bold block mt-0.5" : "text-xs text-[#71717a] block mt-0.5";
                     evaluarAlarmasGlobales(null, null, payload);
                 } else {
                     if (payload === "1") {
@@ -314,30 +344,24 @@
         function conectar() {
             client.connect({
                 onSuccess: () => {
-                    const status = document.getElementById("net-status");
-                    status.className = "bg-[#10b981] text-[#09090b] px-4 py-1.5 rounded-md text-xs font-bold tracking-wider uppercase shadow-inner";
-                    status.innerText = "● CONECTADO";
-                    
                     document.getElementById("btn-luz").innerText = "ACTIVAR";
                     document.getElementById("btn-vent").innerText = "ACTIVAR";
                     document.getElementById("btn-cortina").innerText = "ABRIR PERS";
 
-                    // Suscribirse a todo, incluyendo estados de los actuadores
                     client.subscribe(TOPICS.temp);
                     client.subscribe(TOPICS.hum);
                     client.subscribe(TOPICS.gas);
                     client.subscribe(TOPICS.agua);
                     client.subscribe(TOPICS.pir);
                     client.subscribe(TOPICS.segMode);
-                    client.subscribe(TOPICS.cmdLuz);
-                    client.subscribe(TOPICS.cmdVent);
-                    client.subscribe(TOPICS.cmdCortina);
+                    client.subscribe(TOPICS.stateLuz);
+                    client.subscribe(TOPICS.stateVent);
+                    client.subscribe(TOPICS.stateCortina);
                 }
             });
         }
 
         function enviarComando(actuador) {
-            // Lógica reactiva pura: Solo enviamos el mensaje, el Dashboard se actualizará al recibir el eco del servidor
             let mensaje = "";
             if (actuador === "luz") {
                 mensaje = estadosActuadores.luz ? "OFF" : "ON";
